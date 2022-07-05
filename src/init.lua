@@ -17,6 +17,19 @@ local CAST_TYPES = {
 -- 	Ultra = 1000
 -- }
 
+--[=[ 
+	@type ProjectilePhysicsInfo {
+	Position : Vector3,
+	Velocity : Vector3,
+	Acceleration : Vector3?,
+	Jerk : Vector3?,
+	Terminal : Vector3?,
+	Goal : BasePart?, -- Expected to be for following a specific part.
+	Distance : number,
+	Mass : number?
+	@within ProjectileCast
+}
+]=]
 export type ProjectilePhysicsInfo = {
 	Position : Vector3,
 	Velocity : Vector3,
@@ -27,6 +40,8 @@ export type ProjectilePhysicsInfo = {
 	Distance : number,
 	Mass : number?
 }
+export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
+export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
 
 local min = math.min
 
@@ -64,13 +79,24 @@ local INITIAL_CACHE_SIZE = 100
 
 local ProjectileCasters ={}
 
-local ProjectileCaster = {}
-ProjectileCaster.__index = ProjectileCaster
-ProjectileCaster._notDirectory = true
-ProjectileCaster.CastType = CAST_TYPES
--- ProjectileCaster.PrecisionOption = PRECISION_OPTIONS
+--[=[
+    @class ProjectileCast
 
-function ProjectileCaster.new(name : string)
+   Creates ProjectileCasters.
+]=]
+local ProjectileCast = {}
+ProjectileCast.__index = ProjectileCast
+ProjectileCast._notDirectory = true
+ProjectileCast.CastType = CAST_TYPES
+-- ProjectileCast.PrecisionOption = PRECISION_OPTIONS
+
+--[=[
+    Creates a new projectile caster.
+
+    @param name string -- The name of the ProjectileCaster
+    @return ProjectileCaster -- Used for casting projectiles.
+]=]
+function ProjectileCast.new(name : string)
 	local steppedEvent = Instance.new("BindableEvent")
 
 	local caster = {
@@ -94,11 +120,21 @@ function ProjectileCaster.new(name : string)
 
 	table.insert(ProjectileCasters, caster)
 
-	return setmetatable(caster, ProjectileCaster)
+	return setmetatable(caster, ProjectileCast)
 end
 
-function ProjectileCaster:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName : string, filterType : Enum.RaycastFilterType?, filterDescendantsInstances : {Instance}?, replacesFilterList : boolean?) -- Returns id of the cast.
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+--[=[
+    Creates a new cast.
+
+    @param initialInfo ProjectilePhysicsInfo -- Initial physics information of the projectile.
+    @param castParamsName string --Name of the cast params to use. (Must be created before using Cast)
+    @param filterType Enum.RaycastFilterType? -- If you want to override the RaycastParams of the CastParams
+    @param filterDescendantsInstances {Instance}? -- Instances to filter from casts
+    @param replacesFilterList boolean? -- Whether or not the filtered descendants are added onto, or replace the default filter list.
+    @return ActiveCast -- The active cast being simulated.
+]=]
+function ProjectileCast:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName : string, filterType : Enum.RaycastFilterType?, filterDescendantsInstances : {Instance}?, replacesFilterList : boolean?) -- Returns id of the cast.
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	assert(initialInfo.Position and (initialInfo.Velocity or initialInfo.Terminal), "Inadequate projectile physics info.")
 
@@ -141,11 +177,8 @@ function ProjectileCaster:Cast(initialInfo : ProjectilePhysicsInfo, castParamsNa
 	return activeCast
 end
 
-export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
-export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
-
-function ProjectileCaster:NewCastParams(projectilePrefab : (BasePart | Model)?,  physicsUpdateFunction : PhysicsUpdateFunction?, objectUpdateFunction : ObjectUpdateFunction?) 
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  physicsUpdateFunction : PhysicsUpdateFunction?, objectUpdateFunction : ObjectUpdateFunction?) 
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	-- new projectile info : cache, default cast type, raycast/spatial params, updateFunction.
 	
@@ -209,8 +242,8 @@ function ProjectileCaster:NewCastParams(projectilePrefab : (BasePart | Model)?, 
 end
 
 
-function ProjectileCaster:ReleaseToEngine(activeCast)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:ReleaseToEngine(activeCast)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 	
 	local projectile = activeCast.Instance:Clone()
 
@@ -251,8 +284,8 @@ function ProjectileCaster:ReleaseToEngine(activeCast)
 end
 
 -- Takes an object from the simulation and does a ProjectileCast
-function ProjectileCaster:RetrieveFromEngine(instance, funcName)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:RetrieveFromEngine(instance, funcName)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	-- check parent of instance if it matches am objectCache container.
 	-- make and initialize caster data.
@@ -266,8 +299,8 @@ function ProjectileCaster:RetrieveFromEngine(instance, funcName)
 end
 
 -- The 'fromIndex' parameter is expected to be used internally to marginally speed up the process.
-function ProjectileCaster:DestroyCast(activeCast, fromIndex : number?)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:DestroyCast(activeCast, fromIndex : number?)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	fromIndex = fromIndex or  table.find(self.ActiveCasts, activeCast)
 
@@ -302,8 +335,8 @@ function ProjectileCaster:DestroyCast(activeCast, fromIndex : number?)
 	FullWipe(activeCast)
 end
 
-function  ProjectileCaster:FreezeCast(activeCast)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function  ProjectileCast:FreezeCast(activeCast)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	local activeCasts = self.ActiveCasts
 	local ind = table.find(activeCasts, activeCast) 
@@ -315,8 +348,8 @@ function  ProjectileCaster:FreezeCast(activeCast)
 	table.insert(self.FrozenCasts, activeCast)
 end
 
-function  ProjectileCaster:ResumeCast(activeCast)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function  ProjectileCast:ResumeCast(activeCast)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	local frozenCasts = self.FrozenCasts
 	local ind = table.find(frozenCasts, activeCast) 
@@ -328,8 +361,8 @@ function  ProjectileCaster:ResumeCast(activeCast)
 	table.insert(self.ActiveCasts, activeCast)
 end
 
-function ProjectileCaster:GetCastFromInstance(instance)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:GetCastFromInstance(instance)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	for index, value in ipairs(self.ActiveCasts) do
 		if value.Instance == instance then
@@ -345,8 +378,8 @@ function ProjectileCaster:GetCastFromInstance(instance)
 end
 
 -- One possible way of getting the params is via ActiveCast.ParamsName
-function ProjectileCaster:GetParams(paramsName)
-	assert(self.Hit, "Function only available for an instance of ProjectileCaster")
+function ProjectileCast:GetParams(paramsName)
+	assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
 	return self.ProjectileParams[paramsName]
 end
@@ -448,4 +481,4 @@ PhysicsStepped:Connect(function(deltaTime)
 	end -- end of projectileCaster loop
 end)
 
-return ProjectileCaster
+return ProjectileCast
