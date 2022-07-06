@@ -22,7 +22,7 @@ ProjectileCast.CastType = CAST_TYPES
 
 --[=[
     @interface ProjectilePhysicsInfo
-   .Position Vector3,
+    .Position Vector3,
     .Velocity Vector3,
     .Acceleration Vector3?,
     .Jerk Vector3?,
@@ -46,13 +46,11 @@ export type ProjectilePhysicsInfo = {
 
 --[=[
     @interface ProjectileCastParams
-  ProjectileCache : ObjectCache,
-
-    PhysicsFunction : PhysicsUpdateFunction,
-    ObjectFunction : ObjectUpdateFunction,
-    
-    RaycastParams : RaycastParams,
-    OverlapParams : OverlapParams
+    .ProjectileCache ObjectCache,
+    .PhysicsFunction PhysicsUpdateFunction,
+    .ObjectFunction ObjectUpdateFunction,
+    .RaycastParams RaycastParams,
+    .OverlapParams OverlapParams
     @within ProjectileCast
 
     Cast parameters for use in casting.
@@ -69,18 +67,17 @@ export type ProjectileCastParams = {
 
 --[=[
     @interface ActiveCast
-   .ParamsName string,
+    .ParamsName string,
     .Instance BasePart | Model,
     .PhysicsInfo ProjectilePhysicsInfo,
     .RaycastParams RaycastParams,
     .OverlapParams OverlapParams ,
-
     .UserData table,
     .Time number,
     .Distance number,
     @within ProjectileCast
 
-   Comprehensive data of a simulated cast.
+    Comprehensive data of a simulated cast.
 ]=]
 export type ActiveCast = {
     ParamsName : string,
@@ -94,19 +91,23 @@ export type ActiveCast = {
     Distance : number,
 }
 
---- @type PhysicsUpdateFunction  (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
---- @within ProjectileCast
---- Updates the physics properties of the object during simulation
+--[=[
+    @type PhysicsUpdateFunction  (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
+    @within ProjectileCast
+    Updates the physics properties of the object during simulation
+ ]=]
 export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
 
---- @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
---- @within ProjectileCast
---- Updates the object orientation during simulation
+--[=[
+    @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
+    @within ProjectileCast
+    Updates the object orientation during simulation
+]=]
 export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
 
 local min = math.min
 
----
+
 function FullWipe(t)
     if not t then return end
     
@@ -131,7 +132,6 @@ function FullWipe(t)
     
     t = nil
 end
-----
 
 local CAST_FUNCTION_NAME = "Launch%s"
 local CACHE_FOLDER_NAME  = "_%sPartCache"
@@ -141,7 +141,7 @@ local INITIAL_CACHE_SIZE = 100
 local ProjectileCasters ={}
 
 --[=[
-   Creates and returns a new ProjectileCaster .
+    Creates and returns a new ProjectileCaster .
 ]=]
 function ProjectileCast.new()
     local steppedEvent = Instance.new("BindableEvent")
@@ -171,7 +171,7 @@ function ProjectileCast.new()
 end
 
 --[=[
-   Creates and adds a new cast to the simulation.
+    Creates and adds a new cast to the simulation.
 ]=]
 function ProjectileCast:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName : string, filterType : Enum.RaycastFilterType?, filterDescendantsInstances : {Instance}?, replacesFilterList : boolean?) : ActiveCast -- Returns id of the cast.
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
@@ -218,7 +218,7 @@ function ProjectileCast:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName
 end
 
 --[=[
-   Creates and adds a new set of ProjectileCastParams
+    Creates and adds a new set of ProjectileCastParams
 ]=]
 function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  physicsUpdateFunction : PhysicsUpdateFunction?, objectUpdateFunction : ObjectUpdateFunction?) : ProjectileCastParams
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
@@ -286,13 +286,12 @@ end
 
 --[=[
    Removes the active cast from the ProjectileCaster's simulation and allows the Roblox physics engine to simulate it.
-   :::note Use tabs in admonitions
+    :::note Use tabs in admonitions
     <Tabs>
         <TabItem value="Object" label="Object">The object being simulated is _returned to the ProjectileCache_. A new object is cloned and parented to workspace.</TabItem>
         <TabItem value="Physics" label="Physics">The object has its velocity and angular velocity inherited from PhysicsInfo via [BasePart:ApplyImpulse] and [BasePart:ApplyAngularImpulse]</TabItem>
         <TabItem value="Properties" label="Properties">The object is made CanCollide and Un-anchored.</TabItem>
     </Tabs>
-    :::
 ]=]
 function ProjectileCast:ReleaseToEngine(activeCast : ActiveCast)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
@@ -336,10 +335,10 @@ function ProjectileCast:ReleaseToEngine(activeCast : ActiveCast)
 end
 
 --[=[
-   :::danger
+    :::danger
     NOT YET IMPLEMENTED !
 ]=]
-function ProjectileCast:RetrieveFromEngine(instance, funcName)
+function ProjectileCast:RetrieveFromEngine(instance : Instance, params : ProjectileCastParams)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     -- check parent of instance if it matches am objectCache container.
@@ -354,7 +353,7 @@ function ProjectileCast:RetrieveFromEngine(instance, funcName)
 end
 
 --[=[
-   Cleans up a cast.
+    Cleans up a cast.
    :::danger
     The '_fromIndex' parameter is expected to be used internally only !
 ]=]
@@ -395,7 +394,7 @@ function ProjectileCast:DestroyCast(activeCast : ActiveCast, _fromIndex : number
 end
 
 --[=[
-   Stops simulation of the cast, but the ActiveCast still exists.
+    Stops simulation of the cast, but the ActiveCast still exists.
    :::danger
     NOT YET IMPLEMENTED !
 ]=]
@@ -413,7 +412,7 @@ function  ProjectileCast:FreezeCast(activeCast : ActiveCast)
 end
 
 --[=[
-   Resumes a frozen cast.
+    Resumes a frozen cast.
    :::danger
     NOT YET IMPLEMENTED !
 ]=]
