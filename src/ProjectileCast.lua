@@ -16,9 +16,13 @@ local CAST_TYPES = {
     @class ProjectileCast
 ]=]
 local ProjectileCast = {}
-ProjectileCast.__index = ProjectileCast
 ProjectileCast._notDirectory = true
 ProjectileCast.CastType = CAST_TYPES
+
+local ProjectileParams = {}
+
+local ProjectileCaster = {}
+ProjectileCaster.__index = ProjectileCaster
 
 --[=[
     @interface ProjectilePhysicsInfo
@@ -155,66 +159,20 @@ function ProjectileCast.new()
         
         ActiveCasts = {},
         FrozenCasts = {},
-        ProjectileParams = {},
 
         Hit = Signal.new(),	
         Overlapped = Signal.new(),
         Destroying = Signal.new(),
         Stepped =steppedEvent.Event,
 
-        _stepped = steppedEvent
+        _stepped = steppedEvent,
+
+        _throttleTrack = 0
     }
 
     table.insert(ProjectileCasters, caster)
 
-    return setmetatable(caster, ProjectileCast)
-end
-
---[=[
-    Creates and adds a new cast to the simulation.
-]=]
-function ProjectileCast:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName : string, filterType : Enum.RaycastFilterType?, filterDescendantsInstances : {Instance}?, replacesFilterList : boolean?) : ActiveCast -- Returns id of the cast.
-    assert(self.Hit, "Function only available for an instance of ProjectileCast")
-
-    assert(initialInfo.Position and (initialInfo.Velocity or initialInfo.Terminal), "Inadequate projectile physics info.")
-
-    local castParams = self.ProjectileParams[castParamsName]
-    local oriRCP = castParams.RaycastParams
-
-    assert(castParams, "No cast params of name '" .. castParamsName .. "'")
-
-     local rcp : RaycastParams = RaycastParams.new()
-     local olp : OverlapParams = OverlapParams.new() 
-
-     rcp.FilterType = filterType or oriRCP.FilterType
-     olp.FilterType = filterType or oriRCP.FilterType
-
-     filterDescendantsInstances = filterDescendantsInstances or {}
-
-     if not replacesFilterList then
-        for index, value in ipairs(oriRCP.FilterDescendantsInstances) do
-            table.insert(filterDescendantsInstances, value)
-        end
-     end
-    
-     rcp.FilterDescendantsInstances = filterDescendantsInstances
-    olp.FilterDescendantsInstances = filterDescendantsInstances
-
-    local activeCast = {
-        ParamsName = castParamsName,
-        Instance = castParams.ProjectileCache and castParams.ProjectileCache:GetObject(),
-        PhysicsInfo = initialInfo,
-        RaycastParams = rcp,
-        OverlapParams =olp ,
-
-        UserData = {},
-        Time = 0,
-        Distance = 0,
-    }
-
-    table.insert(self.ActiveCasts, activeCast)
-
-    return activeCast
+    return setmetatable(caster, ProjectileCaster)
 end
 
 --[=[
@@ -279,21 +237,77 @@ function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  p
         OverlapParams = olp
     }
 
-    self.ProjectileParams[projectilePrefab.Name] = projectileCastParams
+   ProjectileParams[projectilePrefab.Name] = projectileCastParams
 
     return projectileCastParams
 end
 
 --[=[
-   Removes the active cast from the ProjectileCaster's simulation and allows the Roblox physics engine to simulate it.
-    :::note Use tabs in admonitions
-    <Tabs>
-        <TabItem value="Object" label="Object">The object being simulated is _returned to the ProjectileCache_. A new object is cloned and parented to workspace.</TabItem>
-        <TabItem value="Physics" label="Physics">The object has its velocity and angular velocity inherited from PhysicsInfo via [BasePart:ApplyImpulse] and [BasePart:ApplyAngularImpulse]</TabItem>
-        <TabItem value="Properties" label="Properties">The object is made CanCollide and Un-anchored.</TabItem>
-    </Tabs>
+    Useful for getting the Params used for an ActiveCast.ProjectileCaster. Sample usage "ActiveCast.ParamsName"
 ]=]
-function ProjectileCast:ReleaseToEngine(activeCast : ActiveCast)
+function ProjectileCast:GetParams(paramsName : string)
+    assert(self.Hit, "Function only available for an instance of ProjectileCast")
+
+    return ProjectileParams[paramsName]
+end
+
+--[=[
+    Creates and adds a new cast to the simulation.
+]=]
+function ProjectileCaster:Cast(initialInfo : ProjectilePhysicsInfo, castParamsName : string, filterType : Enum.RaycastFilterType?, filterDescendantsInstances : {Instance}?, replacesFilterList : boolean?) : ActiveCast -- Returns id of the cast.
+    assert(self.Hit, "Function only available for an instance of ProjectileCast")
+
+    assert(initialInfo.Position and (initialInfo.Velocity or initialInfo.Terminal), "Inadequate projectile physics info.")
+
+    local castParams = ProjectileCast.ProjectileParams[castParamsName]
+    local oriRCP = castParams.RaycastParams
+
+    assert(castParams, "No cast params of name '" .. castParamsName .. "'")
+
+     local rcp : RaycastParams = RaycastParams.new()
+     local olp : OverlapParams = OverlapParams.new() 
+
+     rcp.FilterType = filterType or oriRCP.FilterType
+     olp.FilterType = filterType or oriRCP.FilterType
+
+     filterDescendantsInstances = filterDescendantsInstances or {}
+
+     if not replacesFilterList then
+        for index, value in ipairs(oriRCP.FilterDescendantsInstances) do
+            table.insert(filterDescendantsInstances, value)
+        end
+     end
+    
+     rcp.FilterDescendantsInstances = filterDescendantsInstances
+    olp.FilterDescendantsInstances = filterDescendantsInstances
+
+    local activeCast = {
+        ParamsName = castParamsName,
+        Instance = castParams.ProjectileCache and castParams.ProjectileCache:GetObject(),
+        PhysicsInfo = initialInfo,
+        RaycastParams = rcp,
+        OverlapParams =olp ,
+
+        UserData = {},
+        Time = 0,
+        Distance = 0,
+    }
+
+    table.insert(self.ActiveCasts, activeCast)
+
+    return activeCast
+end
+
+--[=[
+   Removes the active cast from the ProjectileCaster's simulation and allows the Roblox physics engine to simulate it.
+
+    :::note
+    The object being simulated is _returned to the ProjectileCache_. A new object is cloned and parented to workspace.
+    The object has its velocity and angular velocity inherited from PhysicsInfo via [BasePart:ApplyImpulse] and [BasePart:ApplyAngularImpulse]
+    The object is made CanCollide and Un-anchored.
+    :::
+]=]
+function ProjectileCaster:ReleaseToEngine(activeCast : ActiveCast)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
     
     local projectile = activeCast.Instance:Clone()
@@ -338,7 +352,7 @@ end
     :::danger
     NOT YET IMPLEMENTED !
 ]=]
-function ProjectileCast:RetrieveFromEngine(instance : Instance, params : ProjectileCastParams)
+function ProjectileCaster:RetrieveFromEngine(instance : Instance, params : ProjectileCastParams)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     -- check parent of instance if it matches am objectCache container.
@@ -356,8 +370,9 @@ end
     Cleans up a cast.
     :::danger
     The '_fromIndex' parameter is expected to be used internally only !
+    :::
 ]=]
-function ProjectileCast:DestroyCast(activeCast : ActiveCast, _fromIndex : number?)
+function ProjectileCaster:DestroyCast(activeCast : ActiveCast, _fromIndex : number?)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     _fromIndex = _fromIndex or  table.find(self.ActiveCasts, activeCast)
@@ -379,7 +394,7 @@ function ProjectileCast:DestroyCast(activeCast : ActiveCast, _fromIndex : number
 
     -- Return object to its cache :
     if activeCast.Instance then
-        local projectileCache = self.ProjectileParams[activeCast.ParamsName] and  self.ProjectileParams[activeCast.ParamsName].ProjectileCache
+        local projectileCache = ProjectileCast.ProjectileParams[activeCast.ParamsName] and  ProjectileCast.ProjectileParams[activeCast.ParamsName].ProjectileCache
 
         if projectileCache then
             projectileCache:ReturnObject(activeCast.Instance)
@@ -395,10 +410,8 @@ end
 
 --[=[
     Stops simulation of the cast, but the ActiveCast still exists.
-   :::danger
-    NOT YET IMPLEMENTED !
 ]=]
-function  ProjectileCast:FreezeCast(activeCast : ActiveCast)
+function  ProjectileCaster:FreezeCast(activeCast : ActiveCast)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     local activeCasts = self.ActiveCasts
@@ -413,10 +426,8 @@ end
 
 --[=[
     Resumes a frozen cast.
-   :::danger
-    NOT YET IMPLEMENTED !
 ]=]
-function  ProjectileCast:ResumeCast(activeCast : ActiveCast)
+function  ProjectileCaster:ResumeCast(activeCast : ActiveCast)
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     local frozenCasts = self.FrozenCasts
@@ -432,7 +443,7 @@ end
 --[=[
    From an instance, retrieves the full ActiveCast associated with that instance
 ]=]
-function ProjectileCast:GetCastFromInstance(instance : (BasePart | Model))
+function ProjectileCaster:GetCastFromInstance(instance : (BasePart | Model))
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
 
     for index, value in ipairs(self.ActiveCasts) do
@@ -448,23 +459,13 @@ function ProjectileCast:GetCastFromInstance(instance : (BasePart | Model))
     end
 end
 
---[=[
-    Useful for getting the Params used for an ActiveCast.ProjectileCaster
-   Sample usage : ActiveCast.ParamsName
-]=]
-function ProjectileCast:GetParams(paramsName : string)
-    assert(self.Hit, "Function only available for an instance of ProjectileCast")
-
-    return self.ProjectileParams[paramsName]
-end
-
 PhysicsStepped:Connect(function(deltaTime)
     for i = 1, #ProjectileCasters do
         local projectileCaster = ProjectileCasters[i]
 
+        if ((projectileCaster.Throttling % 1) ~= 0) or projectileCaster.Throttling < 0 then warn("Throttling must be a positive whole number. Skipping cycle") continue end
         if not projectileCaster.Active then continue end
-
-        local projectileParams = projectileCaster.ProjectileParams
+        
         local activeCasts = projectileCaster.ActiveCasts
         local castType = projectileCaster.CastType
 
@@ -472,9 +473,14 @@ PhysicsStepped:Connect(function(deltaTime)
         local overlappedEvent =projectileCaster.Overlapped
         local steppedEvent =projectileCaster._stepped
 
-        local i = 1
+        projectileCaster._throttleCount = (projectileCaster._throttleCount % projectileCaster.Throttling)
+
+        local loadSize = math.floor(#activeCasts / projectileCaster.Throttling)
+        local remainder = #activeCasts % projectileCaster.Throttling
+
+        local i =  projectileCaster._throttleCount * loadSize + 1
         
-        while i <= #activeCasts do
+        while i <=  projectileCaster._throttleCount == 0 and (loadSize + remainder) or (projectileCaster._throttleCount + 1) * loadSize  do
             local activeCast = activeCasts[i]
 
             if projectileCaster.MaxTime < activeCast.Time then
@@ -494,7 +500,7 @@ PhysicsStepped:Connect(function(deltaTime)
             if not activeCast then continue end -- if it is the last one in the loop, activeCast will still be nil
 
             local physicsInfo = activeCast.PhysicsInfo
-            local castParams = projectileParams[activeCast.ParamsName]
+            local castParams = ProjectileParams[activeCast.ParamsName]
             local instance = activeCast.Instance
             local userData = activeCast.UserData
 
