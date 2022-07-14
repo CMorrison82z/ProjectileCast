@@ -3,6 +3,8 @@ local PhysicsStepped = game:GetService("RunService").Heartbeat
 local ObjectCache = require(script.ObjectCache)
 local Signal = require(script.Signal)
 
+local t_insert = table.insert
+
 local CAST_TYPES = {
     Box = 1,
     Sphere = 2,
@@ -103,11 +105,12 @@ export type ActiveCast = {
 export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
 
 --[=[
-    @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
+    @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> CFrame
     @within ProjectileCast
     Updates the object orientation during simulation
+    -- TODO : Add warning saying NOT to set the parts actual cframe !
 ]=]
-export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
+export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> CFrame
 
 local min = math.min
 
@@ -156,6 +159,7 @@ function ProjectileCast.new()
         MaxTime = 60,
         MaxDistance = 10000,
         Active = true,
+        OnlyBaseParts = false,
         
         ActiveCasts = {},
         FrozenCasts = {},
@@ -180,6 +184,7 @@ end
 ]=]
 function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  physicsUpdateFunction : PhysicsUpdateFunction?, objectUpdateFunction : ObjectUpdateFunction?) : ProjectileCastParams
     assert(self.Hit, "Function only available for an instance of ProjectileCast")
+    assert(self.OnlyBaseParts and projectilePrefab:IsA("BasePart"), "Attempt to create cast params for ProjectileCast set to 'OnlyBaseParts'")
 
     -- new projectile info : cache, default cast type, raycast/spatial params, updateFunction.
     
@@ -468,6 +473,13 @@ PhysicsStepped:Connect(function(deltaTime)
         
         local activeCasts = projectileCaster.ActiveCasts
         local castType = projectileCaster.CastType
+        local onlyBaseParts = projectileCaster.OnlyBaseParts
+
+        local partList, cframeList;
+
+        if onlyBaseParts then
+            partList, cframeList = {}, {}
+        end
 
         local hitEvent =projectileCaster.Hit
         local overlappedEvent =projectileCaster.Overlapped
@@ -508,7 +520,7 @@ PhysicsStepped:Connect(function(deltaTime)
 
             activeCast.Time += deltaTime
             _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, deltaTime)
-            _ = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
+            local nCFrame = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
 
             local nextPoint = physicsInfo.Position
 
@@ -554,8 +566,19 @@ PhysicsStepped:Connect(function(deltaTime)
                 hitEvent:Fire(rcr, activeCast)
             end
 
+            if onlyBaseParts then
+                t_insert(partList, instance)
+                t_insert(cframeList, nCFrame)
+            else
+                instance:PivotTo(nCFrame)
+            end
+
             i += 1
         end -- end of active cast loop
+
+        if onlyBaseParts then
+            workspace:BulkMoveTo(partList, cframeList, Enum.BulkMoveMode.FireCFrameChanged)
+        end
 
         steppedEvent:Fire()
     end -- end of projectileCaster loop
