@@ -155,6 +155,7 @@ function ProjectileCast.new()
         -- Precision =	PRECISION_OPTIONS.Medium,
         MaxTime = 60,
         MaxDistance = 10000,
+        Throttling = 0,
         Active = true,
         
         ActiveCasts = {},
@@ -167,7 +168,7 @@ function ProjectileCast.new()
 
         _stepped = steppedEvent,
 
-        _throttleTrack = 0
+        _throttleCount = 0
     }
 
     table.insert(ProjectileCasters, caster)
@@ -179,8 +180,6 @@ end
     Creates and adds a new set of ProjectileCastParams
 ]=]
 function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  physicsUpdateFunction : PhysicsUpdateFunction?, objectUpdateFunction : ObjectUpdateFunction?) : ProjectileCastParams
-    assert(self.Hit, "Function only available for an instance of ProjectileCast")
-
     -- new projectile info : cache, default cast type, raycast/spatial params, updateFunction.
     
     local pCache;
@@ -259,7 +258,7 @@ function ProjectileCaster:Cast(initialInfo : ProjectilePhysicsInfo, castParamsNa
 
     assert(initialInfo.Position and (initialInfo.Velocity or initialInfo.Terminal), "Inadequate projectile physics info.")
 
-    local castParams = ProjectileCast.ProjectileParams[castParamsName]
+    local castParams = ProjectileParams[castParamsName]
     local oriRCP = castParams.RaycastParams
 
     assert(castParams, "No cast params of name '" .. castParamsName .. "'")
@@ -394,7 +393,7 @@ function ProjectileCaster:DestroyCast(activeCast : ActiveCast, _fromIndex : numb
 
     -- Return object to its cache :
     if activeCast.Instance then
-        local projectileCache = ProjectileCast.ProjectileParams[activeCast.ParamsName] and  ProjectileCast.ProjectileParams[activeCast.ParamsName].ProjectileCache
+        local projectileCache = ProjectileParams[activeCast.ParamsName] and ProjectileParams[activeCast.ParamsName].ProjectileCache
 
         if projectileCache then
             projectileCache:ReturnObject(activeCast.Instance)
@@ -463,7 +462,10 @@ PhysicsStepped:Connect(function(deltaTime)
     for i = 1, #ProjectileCasters do
         local projectileCaster = ProjectileCasters[i]
 
-        if ((projectileCaster.Throttling % 1) ~= 0) or projectileCaster.Throttling < 0 then warn("Throttling must be a positive whole number. Skipping cycle") continue end
+        local throttling = projectileCaster.Throttling + 1
+        local throttledDeltaTime = throttling * deltaTime
+
+        if ((throttling % 1) ~= 0) or throttling <= 0 then warn("Throttling must be a positive whole number. Skipping cycle") continue end
         if not projectileCaster.Active then continue end
         
         local activeCasts = projectileCaster.ActiveCasts
@@ -473,15 +475,19 @@ PhysicsStepped:Connect(function(deltaTime)
         local overlappedEvent =projectileCaster.Overlapped
         local steppedEvent =projectileCaster._stepped
 
-        projectileCaster._throttleCount = (projectileCaster._throttleCount % projectileCaster.Throttling)
+        projectileCaster._throttleCount = (projectileCaster._throttleCount % throttling)
 
-        local loadSize = math.floor(#activeCasts / projectileCaster.Throttling)
-        local remainder = #activeCasts % projectileCaster.Throttling
+        local loadSize = math.floor(#activeCasts / throttling)
+        local remainder = #activeCasts % throttling
 
         local i =  projectileCaster._throttleCount * loadSize + 1
         
-        while i <=  projectileCaster._throttleCount == 0 and (loadSize + remainder) or (projectileCaster._throttleCount + 1) * loadSize  do
+        while i <=  (projectileCaster._throttleCount == 0 and (loadSize + remainder) or (projectileCaster._throttleCount + 1) * loadSize) do
             local activeCast = activeCasts[i]
+
+            if not activeCast then
+                break
+            end
 
             if projectileCaster.MaxTime < activeCast.Time then
                 projectileCaster:DestroyCast(activeCast)
@@ -506,8 +512,8 @@ PhysicsStepped:Connect(function(deltaTime)
 
             local lastPoint = physicsInfo.Position
 
-            activeCast.Time += deltaTime
-            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, deltaTime)
+            activeCast.Time += throttledDeltaTime
+            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, throttledDeltaTime)
             _ = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
 
             local nextPoint = physicsInfo.Position
@@ -556,6 +562,8 @@ PhysicsStepped:Connect(function(deltaTime)
 
             i += 1
         end -- end of active cast loop
+
+        projectileCaster._throttleCount = (projectileCaster._throttleCount + 1) % throttling
 
         steppedEvent:Fire()
     end -- end of projectileCaster loop
