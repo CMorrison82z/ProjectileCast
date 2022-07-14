@@ -3,6 +3,8 @@ local PhysicsStepped = game:GetService("RunService").Heartbeat
 local ObjectCache = require(script.ObjectCache)
 local Signal = require(script.Signal)
 
+local t_insert = table.insert
+
 local CAST_TYPES = {
     Box = 1,
     Sphere = 2,
@@ -103,11 +105,12 @@ export type ActiveCast = {
 export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : number) -> nil
 
 --[=[
-    @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
+    @type ObjectUpdateFunction  (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> CFrame
     @within ProjectileCast
     Updates the object orientation during simulation
+    -- TODO : Add warning saying NOT to set the parts actual cframe !
 ]=]
-export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> nil
+export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> CFrame
 
 local min = math.min
 
@@ -157,6 +160,7 @@ function ProjectileCast.new()
         MaxDistance = 10000,
         Throttling = 0,
         Active = true,
+        OnlyBaseParts = false,
         
         ActiveCasts = {},
         FrozenCasts = {},
@@ -229,7 +233,7 @@ function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  p
             physicsInfo.Position = x0 + v0 * dt + a0 * (dt ^ 2 / 2)
         end, -- Default to gravity
         ObjectFunction = projectilePrefab and (objectUpdateFunction or function (projectile, physicsInfo, userData)
-            projectile:PivotTo(CFrame.lookAt(physicsInfo.Position, physicsInfo.Position + physicsInfo.Velocity))
+            return CFrame.lookAt(physicsInfo.Position, physicsInfo.Position + physicsInfo.Velocity)
         end), -- Default to align along trajectory
         
         RaycastParams = rcp,
@@ -262,6 +266,7 @@ function ProjectileCaster:Cast(initialInfo : ProjectilePhysicsInfo, castParamsNa
     local oriRCP = castParams.RaycastParams
 
     assert(castParams, "No cast params of name '" .. castParamsName .. "'")
+    assert(self.OnlyBaseParts and castParams.ProjectileCache.Template:IsA("BasePart"), "Attempt to create cast params for ProjectileCast set to 'OnlyBaseParts'")
 
      local rcp : RaycastParams = RaycastParams.new()
      local olp : OverlapParams = OverlapParams.new() 
@@ -470,6 +475,13 @@ PhysicsStepped:Connect(function(deltaTime)
         
         local activeCasts = projectileCaster.ActiveCasts
         local castType = projectileCaster.CastType
+        local onlyBaseParts = projectileCaster.OnlyBaseParts
+
+        local partList, cframeList;
+
+        if onlyBaseParts then
+            partList, cframeList = {}, {}
+        end
 
         local hitEvent =projectileCaster.Hit
         local overlappedEvent =projectileCaster.Overlapped
@@ -512,9 +524,9 @@ PhysicsStepped:Connect(function(deltaTime)
 
             local lastPoint = physicsInfo.Position
 
-            activeCast.Time += throttledDeltaTime
-            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, throttledDeltaTime)
-            _ = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
+            activeCast.Time += deltaTime
+            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, deltaTime)
+            local nCFrame = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
 
             local nextPoint = physicsInfo.Position
 
@@ -560,10 +572,19 @@ PhysicsStepped:Connect(function(deltaTime)
                 hitEvent:Fire(rcr, activeCast)
             end
 
+            if onlyBaseParts then
+                t_insert(partList, instance)
+                t_insert(cframeList, nCFrame)
+            else
+                instance:PivotTo(nCFrame)
+            end
+
             i += 1
         end -- end of active cast loop
 
-        projectileCaster._throttleCount = (projectileCaster._throttleCount + 1) % throttling
+        if onlyBaseParts then
+            workspace:BulkMoveTo(partList, cframeList, Enum.BulkMoveMode.FireCFrameChanged)
+        end
 
         steppedEvent:Fire()
     end -- end of projectileCaster loop
