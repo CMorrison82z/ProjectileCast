@@ -524,8 +524,8 @@ PhysicsStepped:Connect(function(deltaTime)
 
             local lastPoint = physicsInfo.Position
 
-            activeCast.Time += deltaTime
-            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, deltaTime)
+            activeCast.Time += throttledDeltaTime
+            _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, throttledDeltaTime)
             local nCFrame = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
 
             local nextPoint = physicsInfo.Position
@@ -585,6 +585,8 @@ PhysicsStepped:Connect(function(deltaTime)
         if onlyBaseParts then
             workspace:BulkMoveTo(partList, cframeList, Enum.BulkMoveMode.FireCFrameChanged)
         end
+
+        projectileCaster._throttleCount = (projectileCaster._throttleCount + 1) % throttling
 
         steppedEvent:Fire()
     end -- end of projectileCaster loop
