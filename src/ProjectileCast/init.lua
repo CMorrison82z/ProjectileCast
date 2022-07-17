@@ -110,7 +110,7 @@ export type PhysicsUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, dt : n
     Updates the object orientation during simulation
     -- TODO : Add warning saying NOT to set the parts actual cframe !
 ]=]
-export type ObjectUpdateFunction = (projectile : (BasePart | Model), physicsInfo : ProjectilePhysicsInfo, userData : table) -> CFrame
+export type ObjectUpdateFunction = (physicsInfo : ProjectilePhysicsInfo, userData : table, instance : Model | BasePart) -> CFrame
 
 local min = math.min
 
@@ -232,7 +232,7 @@ function ProjectileCast:NewCastParams(projectilePrefab : (BasePart | Model)?,  p
             physicsInfo.Velocity = v0 + a0 * dt
             physicsInfo.Position = x0 + v0 * dt + a0 * (dt ^ 2 / 2)
         end, -- Default to gravity
-        ObjectFunction = projectilePrefab and (objectUpdateFunction or function (projectile, physicsInfo, userData)
+        ObjectFunction = projectilePrefab and (objectUpdateFunction or function (physicsInfo, userData)
             return CFrame.lookAt(physicsInfo.Position, physicsInfo.Position + physicsInfo.Velocity)
         end), -- Default to align along trajectory
         
@@ -526,7 +526,7 @@ PhysicsStepped:Connect(function(deltaTime)
 
             activeCast.Time += throttledDeltaTime
             _ = castParams.PhysicsFunction and castParams.PhysicsFunction(physicsInfo, throttledDeltaTime)
-            local nCFrame = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(instance, physicsInfo, userData)
+            local nCFrame = (castParams.ObjectFunction and activeCast.Instance) and castParams.ObjectFunction(physicsInfo, userData, instance)
 
             local nextPoint = physicsInfo.Position
 
