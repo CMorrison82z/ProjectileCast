@@ -1,7 +1,7 @@
 {
 	"properties": {
 		"Attributes": {
-			"Parent" : {"String" : "game.ServerScriptService.Startup.Modules"}
+			"Parent" : {"String" : "script.Modules"}
 		}
 	}
 }
